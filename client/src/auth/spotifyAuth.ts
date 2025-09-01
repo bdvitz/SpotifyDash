@@ -133,7 +133,7 @@ export function getStoredTokens(): AuthTokens | null {
  */
 export function logout(): void {
   localStorage.removeItem('spotify_tokens');
-  localStorage.removeItem('spotify_code_verifier');
+  localStorage.removeItem('code_verifier');
   localStorage.removeItem('spotify_user');
 }
 
