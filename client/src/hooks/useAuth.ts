@@ -128,6 +128,7 @@ export function useAuth(): UseAuthReturn {
       console.log('Tokens received:', { expires_in: tokens.expires_in });
       
       const user = await fetchUserProfile();
+      console.log('User profile fetched:', user.display_name);
       
       updateAuthState({
         isAuthenticated: true,
@@ -135,9 +136,17 @@ export function useAuth(): UseAuthReturn {
         isLoading: false
       });
 
-      // Clean up URL
-      window.history.replaceState({}, document.title, window.location.pathname);
+      // Clean up URL after successful authentication
+      const newUrl = window.location.origin + window.location.pathname;
+      window.history.replaceState({}, document.title, newUrl);
+      
     } catch (error) {
+      console.error('Callback handling failed:', error);
+      // Only clear storage on actual authentication failure, not processing issues
+      if (error instanceof Error && error.message.includes('Token exchange failed')) {
+        // localStorage.removeItem('spotify_tokens');
+        // localStorage.removeItem('spotify_user');
+      }
       handleAuthError(error, 'handleCallback');
     }
   }, [updateAuthState, handleAuthError]);
@@ -149,18 +158,19 @@ export function useAuth(): UseAuthReturn {
     const initializeAuth = async () => {
       try {
         // Check for OAuth callback
-        const urlParams = new URLSearchParams(window.location.search);
-        const code = urlParams.get('code');
-        const error = urlParams.get('error');
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get('code');
+      const error = urlParams.get('error');
 
-        // Handle OAuth error
-        if (error) {
-          updateAuthState({
-            error: `Spotify authentication failed: ${error}`,
-            isLoading: false
-          });
-          return;
-        }
+      // Handle OAuth error
+      if (error) {
+        console.log('OAuth error received:', error);
+        updateAuthState({
+          error: `Spotify authentication ${error === 'access_denied' ? 'was denied' : 'failed'}: ${error}`,
+          isLoading: false
+        });
+        return;
+      }
 
         // Handle OAuth callback
         if (code) {
@@ -173,31 +183,32 @@ export function useAuth(): UseAuthReturn {
           const cachedUser = getCachedUser();
           
           if (cachedUser) {
-            // Use cached user data
+            console.log('Using cached user data');
             updateAuthState({
               isAuthenticated: true,
               user: cachedUser,
               isLoading: false
             });
           } else {
-            // Fetch fresh user data
+            console.log('Fetching fresh user data');
             await refreshUser();
           }
         } else {
-          // Not authenticated
+          console.log('No existing authentication');
           updateAuthState({
             isAuthenticated: false,
             user: null,
             isLoading: false
           });
         }
-      } catch (error) {
-        handleAuthError(error, 'initializeAuth');
+      } catch (err) {
+        console.error('Auth initialization error:', err);
+        handleAuthError(err, 'initializeAuth');
       }
     };
 
     initializeAuth();
-  }, [handleCallback, refreshUser, handleAuthError, updateAuthState]);
+  }, []); // Remove dependencies to prevent re-running
 
   /**
    * Periodic token validation
