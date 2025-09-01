@@ -1,0 +1,140 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  spotifyId     String   @unique
+  displayName   String
+  email         String?
+  imageUrl      String?
+  country       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  hostedRooms   Room[]   @relation("RoomHost")
+  roomPlayers   RoomPlayer[]
+  gameScores    GameScore[]
+
+  @@map("users")
+}
+
+model Room {
+  id          String     @id @default(cuid())
+  code        String     @unique @db.VarChar(4)
+  hostId      String
+  maxPlayers  Int        @default(8)
+  isActive    Boolean    @default(true)
+  gameType    String     @default("music_quiz")
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // Relations
+  host        User       @relation("RoomHost", fields: [hostId], references: [id])
+  players     RoomPlayer[]
+  games       Game[]
+
+  @@map("rooms")
+}
+
+model RoomPlayer {
+  id        String   @id @default(cuid())
+  roomId    String
+  userId    String
+  joinedAt  DateTime @default(now())
+  isReady   Boolean  @default(false)
+
+  // Relations
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([roomId, userId])
+  @@map("room_players")
+}
+
+model Game {
+  id          String      @id @default(cuid())
+  roomId      String
+  status      GameStatus  @default(WAITING)
+  currentRound Int        @default(0)
+  totalRounds  Int        @default(10)
+  startedAt   DateTime?
+  endedAt     DateTime?
+  createdAt   DateTime    @default(now())
+
+  // Relations
+  room        Room        @relation(fields: [roomId], references: [id])
+  scores      GameScore[]
+  rounds      GameRound[]
+
+  @@map("games")
+}
+
+model GameRound {
+  id            String   @id @default(cuid())
+  gameId        String
+  roundNumber   Int
+  trackId       String?
+  trackName     String?
+  artistName    String?
+  correctAnswer String
+  timeLimit     Int      @default(30)
+  startedAt     DateTime @default(now())
+
+  // Relations
+  game          Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  answers       PlayerAnswer[]
+
+  @@unique([gameId, roundNumber])
+  @@map("game_rounds")
+}
+
+model PlayerAnswer {
+  id          String    @id @default(cuid())
+  roundId     String
+  userId      String
+  answer      String
+  isCorrect   Boolean
+  timeToAnswer Int      // milliseconds
+  submittedAt DateTime  @default(now())
+
+  // Relations
+  round       GameRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, userId])
+  @@map("player_answers")
+}
+
+model GameScore {
+  id          String @id @default(cuid())
+  gameId      String
+  userId      String
+  score       Int    @default(0)
+  correctAnswers Int @default(0)
+  totalAnswers   Int @default(0)
+  averageTime    Int @default(0) // milliseconds
+
+  // Relations
+  game        Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  user        User   @relation(fields: [userId], references: [id])
+
+  @@unique([gameId, userId])
+  @@map("game_scores")
+}
+
+enum GameStatus {
+  WAITING
+  STARTING
+  IN_PROGRESS
+  FINISHED
+  CANCELLED
+}

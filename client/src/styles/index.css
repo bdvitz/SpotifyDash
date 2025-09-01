@@ -1,0 +1,263 @@
+
+@import "tailwindcss";
+@tailwind utilities;
+
+/* Custom CSS Variables for Theme */
+:root {
+  --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --gradient-secondary: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  --glass-bg: rgba(255, 255, 255, 0.1);
+  --glass-border: rgba(255, 255, 255, 0.2);
+}
+
+/* Base Styles */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--gradient-primary);
+  min-height: 100vh;
+  color: white;
+  overflow-x: hidden;
+}
+
+/* Scrollbar Styles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.6);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 92, 246, 0.8);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Firefox Scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(139, 92, 246, 0.6) rgba(255, 255, 255, 0.1);
+}
+
+/* Glass Effect Utility Classes */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+}
+
+.glass-hover {
+  transition: all 0.3s ease;
+}
+
+.glass-hover:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+/* Animation Classes */
+.animate-fadeIn {
+  animation: fadeIn 0.6s ease-out forwards;
+}
+
+.animate-slideUp {
+  animation: slideUp 0.5s ease-out forwards;
+}
+
+.animate-slideDown {
+  animation: slideDown 0.3s ease-out forwards;
+}
+
+.animate-scaleIn {
+  animation: scaleIn 0.4s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Loading Animations */
+.pulse-dot {
+  animation: pulseDot 1.4s infinite ease-in-out;
+}
+
+.pulse-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.pulse-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes pulseDot {
+  0%, 80%, 100% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Spotify Brand Colors */
+.spotify-green {
+  background-color: #1DB954;
+}
+
+.spotify-green:hover {
+  background-color: #1ed760;
+}
+
+.spotify-black {
+  background-color: #191414;
+}
+
+/* Custom Focus Styles */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid rgba(139, 92, 246, 0.6);
+  outline-offset: 2px;
+}
+
+/* Improved Button Styles */
+.btn-primary {
+  @apply bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105;
+}
+
+.btn-secondary {
+  @apply bg-white/10 hover:bg-white/20 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 backdrop-blur-sm border border-white/20;
+}
+
+.btn-success {
+  @apply bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105;
+}
+
+/* Card Styles */
+.card {
+  @apply bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20 shadow-xl;
+}
+
+.card-hover {
+  @apply hover:bg-white/15 hover:scale-105 hover:shadow-2xl transition-all duration-300;
+}
+
+/* Text Gradient Utilities */
+.text-gradient-primary {
+  @apply bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent;
+}
+
+.text-gradient-secondary {
+  @apply bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent;
+}
+
+/* Mobile Optimizations */
+@media (max-width: 768px) {
+  .container {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+  
+  .card {
+    @apply p-4;
+  }
+  
+  .text-4xl {
+    @apply text-3xl;
+  }
+  
+  .text-3xl {
+    @apply text-2xl;
+  }
+}
+
+/* High DPI Display Optimizations */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .glass {
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
+  }
+}
+
+/* Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  
+  .animate-fadeIn,
+  .animate-slideUp,
+  .animate-slideDown,
+  .animate-scaleIn {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
