@@ -30,6 +30,10 @@ interface AuthActions {
 
 type UseAuthReturn = AuthState & AuthActions;
 
+// Global state to handle StrictMode double execution
+let authPromise: Promise<any> | null = null;
+let authResult: any = null;
+
 /**
  * Hook for managing Spotify authentication
  * Handles login, logout, token management, and user state
@@ -80,7 +84,8 @@ export function useAuth(): UseAuthReturn {
    * Logs out the user and clears all auth data
    */
   const logout = useCallback(() => {
-    spotifyLogout();
+    console.log('🚪 Logging out user...');
+    spotifyLogout(); // This clears localStorage
     updateAuthState({
       isAuthenticated: false,
       user: null,
@@ -144,8 +149,8 @@ export function useAuth(): UseAuthReturn {
       console.error('Callback handling failed:', error);
       // Only clear storage on actual authentication failure, not processing issues
       if (error instanceof Error && error.message.includes('Token exchange failed')) {
-        // localStorage.removeItem('spotify_tokens');
-        // localStorage.removeItem('spotify_user');
+        localStorage.removeItem('spotify_tokens');
+        localStorage.removeItem('spotify_user');
       }
       handleAuthError(error, 'handleCallback');
     }
@@ -156,11 +161,21 @@ export function useAuth(): UseAuthReturn {
    */
   useEffect(() => {
     const initializeAuth = async () => {
-      try {
-        // Check for OAuth callback
       const urlParams = new URLSearchParams(window.location.search);
       const code = urlParams.get('code');
       const error = urlParams.get('error');
+
+      // Handle OAuth callback FIRST, before checking existing auth
+      if (code) {
+        console.log('Processing OAuth callback...');
+        try {
+          await handleCallback(code);
+        } catch (err) {
+          console.error('Callback failed:', err);
+          handleAuthError(err, 'OAuth callback');
+        }
+        return;
+      }
 
       // Handle OAuth error
       if (error) {
@@ -172,13 +187,8 @@ export function useAuth(): UseAuthReturn {
         return;
       }
 
-        // Handle OAuth callback
-        if (code) {
-          await handleCallback(code);
-          return;
-        }
-
-        // Check existing authentication
+      // No callback - check existing authentication
+      try {
         if (isAuthenticated()) {
           const cachedUser = getCachedUser();
           
