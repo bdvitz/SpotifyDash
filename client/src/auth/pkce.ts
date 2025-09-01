@@ -45,22 +45,19 @@ export async function redirectToAuthCodeFlow(
   const challenge = await generateCodeChallenge(verifier);
 
   // Store verifier for later use
-  localStorage.setItem('spotify_code_verifier', verifier);
+  localStorage.setItem('code_verifier', verifier);
 
-  // Build authorization URL
-  const params = new URLSearchParams({
-    client_id: clientId,
-    response_type: 'code',
-    redirect_uri: redirectUri,
-    scope: scope,
-    code_challenge_method: 'S256',
-    code_challenge: challenge,
-    // Add state parameter for additional security (optional but recommended)
-    state: generateState()
-  });
+  // Build authorization URL parameters (matching Spotify docs exactly)
+  const params = new URLSearchParams();
+  params.append('client_id', clientId);
+  params.append('response_type', 'code');
+  params.append('redirect_uri', redirectUri);
+  params.append('scope', scope);
+  params.append('code_challenge_method', 'S256');
+  params.append('code_challenge', challenge);
 
   // Redirect to Spotify
-  window.location.href = `https://accounts.spotify.com/authorize?${params.toString()}`;
+  document.location = `https://accounts.spotify.com/authorize?${params.toString()}`;
 }
 
 /**
@@ -81,18 +78,26 @@ export async function getAccessToken(
   refresh_token?: string;
   scope: string;
 }> {
-  const verifier = localStorage.getItem('spotify_code_verifier');
+  const verifier = localStorage.getItem('code_verifier');
   
   if (!verifier) {
     throw new Error('No code verifier found. Please restart the authentication process.');
   }
 
-  const params = new URLSearchParams({
+  // Build form data (matching Spotify docs exactly)
+  const params = new URLSearchParams();
+  params.append('client_id', clientId);
+  params.append('grant_type', 'authorization_code');
+  params.append('code', code);
+  params.append('redirect_uri', redirectUri);
+  params.append('code_verifier', verifier);
+
+  console.log('Token exchange params:', {
     client_id: clientId,
     grant_type: 'authorization_code',
-    code: code,
     redirect_uri: redirectUri,
-    code_verifier: verifier
+    code_length: code.length,
+    verifier_length: verifier.length
   });
 
   const response = await fetch('https://accounts.spotify.com/api/token', {
@@ -105,33 +110,18 @@ export async function getAccessToken(
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(`Token exchange failed: ${errorData.error_description || response.statusText}`);
+    console.error('Token exchange failed:', {
+      status: response.status,
+      statusText: response.statusText,
+      error: errorData
+    });
+    throw new Error(`Token exchange failed: ${errorData.error_description || errorData.error || response.statusText}`);
   }
 
   const tokenData = await response.json();
   
   // Clean up stored verifier
-  localStorage.removeItem('spotify_code_verifier');
+  localStorage.removeItem('code_verifier');
   
   return tokenData;
-}
-
-/**
- * Generates a random state parameter for additional security
- * @returns Random state string
- */
-function generateState(): string {
-  const array = new Uint8Array(16);
-  crypto.getRandomValues(array);
-  return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
-}
-
-/**
- * Validates the state parameter returned from Spotify
- * @param returnedState - State returned from Spotify
- * @param originalState - Original state sent to Spotify
- * @returns True if states match
- */
-export function validateState(returnedState: string | null, originalState: string): boolean {
-  return returnedState === originalState;
 }
