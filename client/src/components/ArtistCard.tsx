@@ -38,25 +38,25 @@ const ArtistCard: React.FC<ArtistCardProps> = ({ artist, rank }) => {
   };
 
   return (
-    <div className="flex items-center space-x-4 p-3 bg-white/5 rounded-xl hover:bg-white/10 transition-all duration-200 group cursor-pointer">
+    <div className="flex items-center space-x-3 sm:space-x-4 p-3 bg-white/5 rounded-xl hover:bg-white/10 transition-all duration-200 group cursor-pointer min-w-0">
       {/* Rank */}
-      <span className="text-purple-300 font-bold w-8 text-center group-hover:text-white transition-colors duration-200">
+      <span className="text-purple-300 font-bold w-6 sm:w-8 text-center group-hover:text-white transition-colors duration-200 flex-shrink-0">
         {rank}
       </span>
 
       {/* Artist Image */}
-      <div className="relative">
+      <div className="relative flex-shrink-0">
         <img 
           src={getImageUrl()} 
           alt={artist.name} 
-          className="w-12 h-12 rounded-full shadow-md group-hover:shadow-lg transition-shadow duration-200" 
+          className="w-10 h-10 sm:w-12 sm:h-12 rounded-full shadow-md group-hover:shadow-lg transition-shadow duration-200" 
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
       </div>
 
       {/* Artist Info */}
       <div className="flex-1 min-w-0">
-        <p className="text-white font-semibold truncate group-hover:text-blue-300 transition-colors duration-200">
+        <p className="text-white font-semibold truncate group-hover:text-blue-300 transition-colors duration-200 text-sm sm:text-base">
           {artist.name}
         </p>
         
@@ -65,13 +65,13 @@ const ArtistCard: React.FC<ArtistCardProps> = ({ artist, rank }) => {
           {artist.genres.slice(0, 2).map((genre, index) => (
             <span 
               key={genre}
-              className={`px-2 py-0.5 rounded-full text-xs font-medium ${getGenreColors(index)}`}
+              className={`px-1.5 sm:px-2 py-0.5 rounded-full text-xs font-medium ${getGenreColors(index)}`}
             >
               {genre}
             </span>
           ))}
           {artist.genres.length > 2 && (
-            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-500/20 text-gray-300">
+            <span className="px-1.5 sm:px-2 py-0.5 rounded-full text-xs font-medium bg-gray-500/20 text-gray-300">
               +{artist.genres.length - 2}
             </span>
           )}
@@ -85,14 +85,14 @@ const ArtistCard: React.FC<ArtistCardProps> = ({ artist, rank }) => {
       </div>
 
       {/* Actions */}
-      <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-        {/* Popularity indicator */}
-        <div className="hidden sm:flex items-center space-x-1">
+      <div className="flex items-center space-x-1 sm:space-x-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex-shrink-0">
+        {/* Popularity indicator - hide on very small screens */}
+        <div className="hidden md:flex items-center space-x-1">
           <div className="flex space-x-0.5">
             {Array.from({ length: 5 }, (_, i) => (
               <div
                 key={i}
-                className={`w-1 h-4 rounded-full ${
+                className={`w-1 h-3 sm:h-4 rounded-full ${
                   i < Math.ceil(artist.popularity / 20) 
                     ? 'bg-blue-400' 
                     : 'bg-gray-600'
@@ -105,10 +105,10 @@ const ArtistCard: React.FC<ArtistCardProps> = ({ artist, rank }) => {
         {/* Spotify Link */}
         <button
           onClick={handleSpotifyClick}
-          className="p-2 rounded-full bg-green-600 hover:bg-green-700 text-white transition-colors duration-200"
+          className="p-1.5 sm:p-2 rounded-full bg-green-600 hover:bg-green-700 text-white transition-colors duration-200"
           title="Open in Spotify"
         >
-          <ExternalLink className="w-4 h-4" />
+          <ExternalLink className="w-3 h-3 sm:w-4 sm:h-4" />
         </button>
       </div>
     </div>

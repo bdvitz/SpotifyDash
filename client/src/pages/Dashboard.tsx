@@ -210,7 +210,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onJoinGame, onCreateGame })
               <option value={10}>Top 10 Songs</option>
               <option value={25}>Top 25 Songs</option>
               <option value={50}>Top 50 Songs</option>
-              <option value={100}>Top 100 Songs</option>
             </select>
             <button
               onClick={handleRefresh}
@@ -244,7 +243,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onJoinGame, onCreateGame })
                 <Music className="w-6 h-6 text-green-400 mr-2" />
                 Top Songs ({topTracks?.length || 0})
               </h3>
-              <div className="space-y-3 max-h-96 overflow-y-auto custom-scrollbar">
+              <div className="space-y-3 max-h-128 overflow-y-auto custom-scrollbar">
                 {topTracks?.map((track, index) => (
                   <TrackCard 
                     key={track.id} 
@@ -261,7 +260,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onJoinGame, onCreateGame })
                 <Users className="w-6 h-6 text-blue-400 mr-2" />
                 Top Artists ({topArtists?.length || 0})
               </h3>
-              <div className="space-y-3 max-h-96 overflow-y-auto custom-scrollbar">
+              <div className="space-y-3 max-h-128 overflow-y-auto custom-scrollbar">
                 {topArtists?.map((artist, index) => (
                   <ArtistCard 
                     key={artist.id} 
@@ -278,7 +277,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onJoinGame, onCreateGame })
                 <Play className="w-6 h-6 text-purple-400 mr-2" />
                 Top Albums ({topAlbums.length})
               </h3>
-              <div className="space-y-3 max-h-96 overflow-y-auto custom-scrollbar">
+              <div className="space-y-3 max-h-128 overflow-y-auto custom-scrollbar">
                 {topAlbums.map((album, index) => (
                   <div key={album.id} className="flex items-center space-x-4 p-3 bg-white/5 rounded-xl hover:bg-white/10 transition-all duration-200 group">
                     <span className="text-purple-300 font-bold w-8 text-center group-hover:text-white transition-colors duration-200">
