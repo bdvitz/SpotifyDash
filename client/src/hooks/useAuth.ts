@@ -30,10 +30,6 @@ interface AuthActions {
 
 type UseAuthReturn = AuthState & AuthActions;
 
-// Global state to handle StrictMode double execution
-let authPromise: Promise<any> | null = null;
-let authResult: any = null;
-
 /**
  * Hook for managing Spotify authentication
  * Handles login, logout, token management, and user state
@@ -147,11 +143,9 @@ export function useAuth(): UseAuthReturn {
       
     } catch (error) {
       console.error('Callback handling failed:', error);
-      // Only clear storage on actual authentication failure, not processing issues
-      if (error instanceof Error && error.message.includes('Token exchange failed')) {
-        localStorage.removeItem('spotify_tokens');
-        localStorage.removeItem('spotify_user');
-      }
+      // Clear any partial auth state
+      localStorage.removeItem('spotify_tokens');
+      localStorage.removeItem('spotify_user');
       handleAuthError(error, 'handleCallback');
     }
   }, [updateAuthState, handleAuthError]);
@@ -161,64 +155,57 @@ export function useAuth(): UseAuthReturn {
    */
   useEffect(() => {
     const initializeAuth = async () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const code = urlParams.get('code');
-      const error = urlParams.get('error');
-
-      // Handle OAuth callback FIRST, before checking existing auth
-      if (code) {
-        console.log('Processing OAuth callback...');
-        try {
-          await handleCallback(code);
-        } catch (err) {
-          console.error('Callback failed:', err);
-          handleAuthError(err, 'OAuth callback');
-        }
-        return;
-      }
-
-      // Handle OAuth error
-      if (error) {
-        console.log('OAuth error received:', error);
-        updateAuthState({
-          error: `Spotify authentication ${error === 'access_denied' ? 'was denied' : 'failed'}: ${error}`,
-          isLoading: false
-        });
-        return;
-      }
-
-      // No callback - check existing authentication
       try {
+        // Check for OAuth callback
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get('code');
+        const error = urlParams.get('error');
+
+        // Handle OAuth error
+        if (error) {
+          updateAuthState({
+            error: `Spotify authentication failed: ${error}`,
+            isLoading: false
+          });
+          return;
+        }
+
+        // Handle OAuth callback
+        if (code) {
+          await handleCallback(code);
+          return;
+        }
+
+        // Check existing authentication
         if (isAuthenticated()) {
           const cachedUser = getCachedUser();
           
           if (cachedUser) {
-            console.log('Using cached user data');
+            // Use cached user data
             updateAuthState({
               isAuthenticated: true,
               user: cachedUser,
               isLoading: false
             });
           } else {
-            console.log('Fetching fresh user data');
+            // Fetch fresh user data
             await refreshUser();
           }
         } else {
-          console.log('No existing authentication');
+          // Not authenticated
           updateAuthState({
             isAuthenticated: false,
             user: null,
             isLoading: false
           });
         }
-      } catch (err) {
-        console.error('Auth initialization error:', err);
-        handleAuthError(err, 'initializeAuth');
+      } catch (error) {
+        handleAuthError(error, 'initializeAuth');
       }
     };
 
     initializeAuth();
-  }, []); // Remove dependencies to prevent re-running
+  }, [handleCallback, refreshUser, handleAuthError, updateAuthState]);
 
   /**
    * Periodic token validation
