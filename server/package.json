@@ -5,37 +5,36 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "nodemon --watch 'src/**/*.ts' --exec ts-node src/index.ts",
+    "dev:local": "nodemon --env-file=.env.local --watch 'src/**/*.ts' --exec ts-node src/index.ts",
+    "start": "NODE_ENV=production node dist/index.js",
     "build": "tsc",
-    "start": "node dist/index.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
+    "db:push:local": "prisma db push --env-file=.env.local",
     "db:migrate": "prisma migrate dev",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "db:studio:local": "prisma studio --env-file=.env.local"
   },
-  "keywords": [
-    "spotify",
-    "music",
-    "game",
-    "quiz"
-  ],
+  "keywords": ["spotify", "music", "game", "quiz"],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@prisma/client": "^6.14.0",
-    "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
     "express": "^5.1.0",
     "socket.io": "^4.7.4",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express-rate-limit": "^7.1.5",
+    "prisma": "^5.8.0",
+    "@prisma/client": "^5.8.0",
     "uuid": "^9.0.1"
   },
   "devDependencies": {
-    "@types/cors": "^2.8.17",
     "@types/express": "^5.0.3",
     "@types/node": "^24.3.0",
+    "@types/cors": "^2.8.17",
     "@types/uuid": "^9.0.7",
     "nodemon": "^3.1.10",
-    "prisma": "^6.14.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.2"
   }

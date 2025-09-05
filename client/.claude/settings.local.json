@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(C:\\projects\\inclew-app\\server\\src/**)",
+      "Read(C:\\projects\\inclew-app\\server\\prisma/**)",
+      "Read(C:\\projects\\inclew-app\\server\\src\\controllers/**)",
+      "Read(C:\\projects\\inclew-app\\server\\src\\controllers/**)",
+      "Read(C:\\projects\\inclew-app\\server\\src\\sockets/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
