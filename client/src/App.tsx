@@ -127,7 +127,7 @@ function App() {
       <header className="bg-black/20 backdrop-blur-sm border-b border-purple-500/20 sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
-            <h1 className="text-3xl font-bold text-white tracking-wider bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+            <h1 className="text-3xl font-bold text-white tracking-wider bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text">
               INCLEW
             </h1>
             <div className="flex items-center space-x-4">
