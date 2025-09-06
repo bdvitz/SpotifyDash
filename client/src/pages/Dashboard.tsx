@@ -5,6 +5,8 @@ import { useSpotifyAPI } from '../hooks/useSpotifyAPI';
 import TrackCard from '../components/TrackCard';
 import ArtistCard from '../components/ArtistCard';
 import { gameApi } from '../utils/api';
+import ConnectionStatus from '../components/ConnectionStatus';
+import { useSocket } from '../hooks/useSocket';
 
 interface DashboardProps {
   user: SpotifyUser;
@@ -23,6 +25,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onJoinGame, onCreateGame })
     refreshData 
   } = useSpotifyAPI();
   
+  const { connectionStatus, isConnected } = useSocket();
   const [joinRoomCode, setJoinRoomCode] = React.useState('');
   const [isJoining, setIsJoining] = React.useState(false);
   const [isCreating, setIsCreating] = React.useState(false);
@@ -92,14 +95,19 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onJoinGame, onCreateGame })
 
   return (
     <div className="space-y-8 animate-fade-in">
-      {/* Welcome Section */}
-      <div className="text-center">
-        <h2 className="text-4xl font-bold text-white mb-3">
-          Welcome back, {user.display_name}! 🎵
-        </h2>
-        <p className="text-xl text-purple-200">
-          Ready to explore your music taste and challenge friends?
-        </p>
+      {/* Socket Connection Status */}
+      <div className="flex justify-between items-center">
+        <div className="text-center flex-1">
+          <h2 className="text-4xl font-bold text-white mb-3">
+            Welcome back, {user.display_name}! 🎵
+          </h2>
+          <p className="text-xl text-purple-200">
+            Ready to explore your music taste and challenge friends?
+          </p>
+        </div>
+        <div className="ml-4">
+          <ConnectionStatus status={connectionStatus} />
+        </div>
       </div>
 
       {/* Quick Actions */}
