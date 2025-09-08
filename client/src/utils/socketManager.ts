@@ -26,7 +26,9 @@ interface SocketEvents {
   'player-ready-update': (data: { spotifyId: string; isReady: boolean }) => void;
   'player-reconnected': (data: { playerId: string; displayName: string }) => void;
   
-  'game-starting': (data: { gameId: string; totalQuestions: number }) => void;
+  'game-start-initiated': (data: { hostName: string; playerCount: number; estimatedLoadTime: number }) => void;
+  'game-started': (data: { gameId: string; totalQuestions: number; players: any[] }) => void;
+  'game-start-failed': (data: { message: string }) => void;
   'question-start': (data: { 
     questionNumber: number; 
     question: string; 
@@ -232,15 +234,18 @@ export class SocketManager {
     this.socket.emit('player-ready', { isReady });
   }
 
-  startGame(gameId: string, totalQuestions: number): void {
+  // Host game control methods
+  startGame(): void {
     if (!this.socket?.connected) {
       console.error('Cannot start game - not connected to server');
       return;
     }
 
-    this.socket.emit('game-started', { gameId, totalQuestions });
+    console.log('Host starting game...');
+    this.socket.emit('start-game', {});
   }
 
+  // Game flow methods
   sendQuestion(questionData: {
     questionNumber: number;
     question: string;
@@ -298,6 +303,16 @@ export class SocketManager {
     }
 
     this.socket.emit('game-ended', { finalScores, gameStats });
+  }
+
+  // Generic emit method for custom events
+  emit(event: string, data?: any): void {
+    if (!this.socket?.connected) {
+      console.error(`Cannot emit ${event} - not connected to server`);
+      return;
+    }
+
+    this.socket.emit(event, data);
   }
 
   on<K extends keyof SocketEvents>(event: K, callback: SocketEvents[K]): void {

@@ -52,21 +52,28 @@ router.post('/', async (req: Request, res: Response) => {
           roomId: room.id,
           spotifyId,
           displayName,
-          imageUrl,
+          imageUrl: imageUrl || null,
           isHost: true,
-          isReady: true
+          isReady: true // Host is automatically ready
         }
       });
 
       return { room, hostPlayer };
     });
 
-    console.log(`Room created: ${roomCode} by ${displayName}`);
+    console.log(`Room created: ${roomCode} by ${displayName} (host counts as player)`);
 
     res.json({
       roomCode: result.room.code,
       roomId: result.room.id,
-      hostPlayer: result.hostPlayer
+      hostPlayer: {
+        id: result.hostPlayer.id,
+        spotifyId: result.hostPlayer.spotifyId,
+        displayName: result.hostPlayer.displayName,
+        imageUrl: result.hostPlayer.imageUrl,
+        isHost: result.hostPlayer.isHost,
+        isReady: result.hostPlayer.isReady
+      }
     });
 
   } catch (error) {
@@ -118,7 +125,8 @@ router.get('/:code', async (req: Request, res: Response) => {
       settings: room.settings,
       players: room.players,
       currentGame: room.games[0] || null,
-      createdAt: room.createdAt
+      createdAt: room.createdAt,
+      playerCount: room.players.length // Include total player count
     });
 
   } catch (error) {
@@ -163,7 +171,20 @@ router.post('/:code/join', async (req: Request, res: Response) => {
     // Check if player already in room
     const existingPlayer = room.players.find(p => p.spotifyId === spotifyId);
     if (existingPlayer) {
-      return res.status(409).json({ error: 'Already in this room' });
+      // Return existing player info instead of error
+      return res.json({
+        roomId: room.id,
+        player: {
+          id: existingPlayer.id,
+          spotifyId: existingPlayer.spotifyId,
+          displayName: existingPlayer.displayName,
+          imageUrl: existingPlayer.imageUrl,
+          isHost: existingPlayer.isHost,
+          isReady: existingPlayer.isReady
+        },
+        playerCount: room.players.length,
+        message: 'Player already in room'
+      });
     }
 
     const newPlayer = await prisma.roomPlayer.create({
@@ -171,17 +192,24 @@ router.post('/:code/join', async (req: Request, res: Response) => {
         roomId: room.id,
         spotifyId,
         displayName,
-        imageUrl,
+        imageUrl: imageUrl || null,
         isHost: false,
         isReady: false
       }
     });
 
-    console.log(`Player joined room ${code}: ${displayName}`);
+    console.log(`Player joined room ${code}: ${displayName} (${room.players.length + 1} total players)`);
 
     res.json({
       roomId: room.id,
-      player: newPlayer,
+      player: {
+        id: newPlayer.id,
+        spotifyId: newPlayer.spotifyId,
+        displayName: newPlayer.displayName,
+        imageUrl: newPlayer.imageUrl,
+        isHost: newPlayer.isHost,
+        isReady: newPlayer.isReady
+      },
       playerCount: room.players.length + 1
     });
 

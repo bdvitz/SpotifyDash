@@ -33,8 +33,11 @@ model RoomPlayer {
   imageUrl     String?
   isHost       Boolean  @default(false)
   isReady      Boolean  @default(false)
-  musicData    Json?    // Stores top tracks, artists, albums
-  joinedAt     DateTime @default(now())
+  musicData         Json?    // Stores top tracks, artists, albums
+  joinedAt          DateTime @default(now())
+  reconnectionToken String?  // Token for reconnecting after disconnect
+  deviceId          String?  // Spotify device ID for reconnection
+  lastActiveAt      DateTime @default(now()) @updatedAt
 
   // Relations
   room         Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)

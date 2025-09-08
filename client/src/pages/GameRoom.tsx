@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { SpotifyUser } from '../auth/spotifyAuth';
-import { Users, ArrowLeft, Crown, Check, X, Wifi } from 'lucide-react';
+import { Users, ArrowLeft, Crown, Check, X, Wifi, Play, Clock, Loader } from 'lucide-react';
 import { useSocket } from '../hooks/useSocket';
+import { socketManager } from '../utils/socketManager';
 import ConnectionStatus from '../components/ConnectionStatus';
 
 interface GameRoomProps {
@@ -15,39 +16,83 @@ const GameRoom: React.FC<GameRoomProps> = ({ user, roomCode, onLeaveGame }) => {
     connectionStatus, 
     isConnected, 
     connectionError, 
-    roomState,
-    joinRoom,
-    setPlayerReady
+    roomState
   } = useSocket();
 
   const [hasJoinedRoom, setHasJoinedRoom] = useState(false);
+  const [isStartingGame, setIsStartingGame] = useState(false);
+  const [gameStartStatus, setGameStartStatus] = useState<string | null>(null);
 
   // Join room when connected and have room code
   useEffect(() => {
     if (isConnected && roomCode && !hasJoinedRoom) {
       console.log(`Joining room ${roomCode} as ${user.id}`);
-      joinRoom(roomCode, user.id);
+      socketManager.joinRoom(roomCode, user.id);
       setHasJoinedRoom(true);
     }
-  }, [isConnected, roomCode, user.id, joinRoom, hasJoinedRoom]);
+  }, [isConnected, roomCode, user.id, hasJoinedRoom]);
 
   // Reset join status when room code changes
   useEffect(() => {
     setHasJoinedRoom(false);
   }, [roomCode]);
 
+  // Listen for game start events
+  useEffect(() => {
+    const handleGameStartInitiated = (data: { hostName: string; playerCount: number; estimatedLoadTime: number }) => {
+      setIsStartingGame(true);
+      setGameStartStatus(`${data.hostName} is starting the game with ${data.playerCount} player(s)...`);
+    };
+
+    const handleGameStarted = (data: { gameId: string; totalQuestions: number }) => {
+      setIsStartingGame(false);
+      setGameStartStatus(`Game started! ${data.totalQuestions} questions incoming...`);
+      // Here you would navigate to the actual game interface
+      setTimeout(() => {
+        setGameStartStatus(null);
+        // TODO: Navigate to game play interface
+        console.log('Game started with ID:', data.gameId);
+      }, 2000);
+    };
+
+    const handleGameStartFailed = (data: { message: string }) => {
+      setIsStartingGame(false);
+      setGameStartStatus(`Failed to start game: ${data.message}`);
+      setTimeout(() => setGameStartStatus(null), 3000);
+    };
+
+    socketManager.on('game-start-initiated', handleGameStartInitiated);
+    socketManager.on('game-started', handleGameStarted);
+    socketManager.on('game-start-failed', handleGameStartFailed);
+
+    return () => {
+      socketManager.off('game-start-initiated', handleGameStartInitiated);
+      socketManager.off('game-started', handleGameStarted);
+      socketManager.off('game-start-failed', handleGameStartFailed);
+    };
+  }, []);
+
   const isHost = roomState?.players.find(p => p.spotifyId === user.id)?.isHost || false;
   const currentPlayer = roomState?.players.find(p => p.spotifyId === user.id);
 
   const handleToggleReady = () => {
     const newReadyState = !currentPlayer?.isReady;
-    setPlayerReady(newReadyState);
+    socketManager.setPlayerReady(newReadyState);
+  };
+
+  const handleStartGame = () => {
+    if (!isHost || isStartingGame) return;
+    
+    setIsStartingGame(true);
+    socketManager.emit('start-game', {});
   };
 
   const handleLeave = () => {
     setHasJoinedRoom(false);
     onLeaveGame();
   };
+
+  const canStartGame = isHost && roomState && roomState.players.length >= 1 && !isStartingGame;
 
   if (!roomCode) {
     return (
@@ -57,6 +102,36 @@ const GameRoom: React.FC<GameRoomProps> = ({ user, roomCode, onLeaveGame }) => {
           <button onClick={onLeaveGame} className="btn-secondary">
             Back to Dashboard
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Game loading screen
+  if (isStartingGame || gameStartStatus) {
+    return (
+      <div className="max-w-2xl mx-auto text-center">
+        <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-12 border border-white/20">
+          <div className="mb-6">
+            {isStartingGame ? (
+              <Loader className="w-16 h-16 text-purple-400 mx-auto animate-spin" />
+            ) : (
+              <Check className="w-16 h-16 text-green-400 mx-auto" />
+            )}
+          </div>
+          <h2 className="text-3xl font-bold text-white mb-4">
+            {isStartingGame ? 'Starting Game...' : 'Game Ready!'}
+          </h2>
+          <p className="text-purple-200 text-lg mb-6">
+            {gameStartStatus}
+          </p>
+          {isStartingGame && (
+            <div className="space-y-2 text-sm text-purple-300">
+              <p>• Generating personalized questions</p>
+              <p>• Analyzing music preferences</p>
+              <p>• Preparing game interface</p>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -198,20 +273,37 @@ const GameRoom: React.FC<GameRoomProps> = ({ user, roomCode, onLeaveGame }) => {
 
             {/* Host Controls */}
             {isHost && (
-              <div className="text-center space-y-4">
-                <div className="bg-yellow-500/20 border border-yellow-400/50 rounded-lg p-4">
-                  <p className="text-yellow-200 text-sm mb-2">
-                    Host Controls - Coming in Phase 4B
+              <div className="text-center space-y-4 mb-8">
+                <div className="bg-yellow-500/10 border border-yellow-400/30 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-yellow-300 mb-2">Host Controls</h3>
+                  <p className="text-yellow-200 text-sm mb-4">
+                    You can start the game with as few as 1 player for testing purposes.
                   </p>
-                  <p className="text-yellow-300 text-xs">
-                    Start game will be enabled when all players are ready
-                  </p>
+                  <button
+                    onClick={handleStartGame}
+                    disabled={!canStartGame}
+                    className={`flex items-center justify-center space-x-2 px-6 py-3 rounded-lg font-semibold transition-all duration-200 mx-auto ${
+                      canStartGame
+                        ? 'bg-green-600 hover:bg-green-700 text-white shadow-lg hover:shadow-xl transform hover:scale-105'
+                        : 'bg-gray-600 text-gray-300 cursor-not-allowed'
+                    }`}
+                  >
+                    <Play className="w-5 h-5" />
+                    <span>
+                      {roomState.players.length === 1 ? 'Start Solo Test Game' : `Start Game (${roomState.players.length} players)`}
+                    </span>
+                  </button>
+                  {roomState.players.length === 1 && (
+                    <p className="text-yellow-300 text-xs mt-2">
+                      Test mode: You can play alone to test the game mechanics
+                    </p>
+                  )}
                 </div>
               </div>
             )}
 
             {/* Actions */}
-            <div className="flex justify-center space-x-4 mt-8">
+            <div className="flex justify-center space-x-4">
               <button
                 onClick={handleLeave}
                 className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white px-6 py-3 rounded-lg transition-all duration-200 font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center space-x-2"
