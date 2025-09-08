@@ -3,10 +3,11 @@ import { useAuth } from './hooks/useAuth';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import GameRoom from './pages/GameRoom';
-import { LogOut, Music, Home, Users } from 'lucide-react';
+import TestPage from './pages/TestPage';
+import { LogOut, Home, Users, Settings } from 'lucide-react';
 import TestAuth from './TestAuth';
 
-type Page = 'dashboard' | 'game';
+type Page = 'dashboard' | 'game' | 'test';
 
 function App() {
   const { isAuthenticated, user, isLoading, error, logout, clearError } = useAuth();
@@ -41,7 +42,7 @@ function App() {
         <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 border border-white/20 max-w-md text-center">
           <div className={`w-16 h-16 ${isAccessDenied ? 'bg-yellow-500/20' : 'bg-red-500/20'} rounded-full flex items-center justify-center mx-auto mb-4`}>
             <span className={`${isAccessDenied ? 'text-yellow-400' : 'text-red-400'} text-2xl`}>
-              {isAccessDenied ? '⚠' : '❌'}
+              {isAccessDenied ? '⚠️' : '❌'}
             </span>
           </div>
           <h2 className="text-2xl font-bold text-white mb-4">
@@ -169,6 +170,13 @@ function App() {
               active={currentPage === 'game'} 
               onClick={() => setCurrentPage('game')}
             />
+            <NavButton 
+              icon={Settings} 
+              label="Test" 
+              page="test" 
+              active={currentPage === 'test'} 
+              onClick={() => setCurrentPage('test')}
+            />
           </div>
         </div>
       </nav>
@@ -188,6 +196,9 @@ function App() {
             roomCode={gameRoomCode}
             onLeaveGame={handleLeaveGame}
           />
+        )}
+        {currentPage === 'test' && (
+          <TestPage />
         )}
       </main>
       {/* Testing authorization in phase 2 statement */}

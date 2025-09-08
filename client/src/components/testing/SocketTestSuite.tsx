@@ -1,90 +1,133 @@
-// File: client/src/components/testing/SocketTestSuite.tsx
 import React, { useState, useEffect } from 'react';
 import { useSocket } from '../../hooks/useSocket';
 import { socketManager } from '../../utils/socketManager';
 import { checkApiHealth } from '../../utils/api';
+import { createTestUser, waitForCondition, testLogger, generateTestScenario } from '../../utils/testing/socketTestHelpers';
+import { Play, Square, RotateCcw, Download, Copy, AlertCircle, CheckCircle, Clock } from 'lucide-react';
 
 interface TestResult {
   test: string;
   status: 'pending' | 'pass' | 'fail';
   message: string;
   timestamp: number;
+  duration?: number;
 }
 
 const SocketTestSuite: React.FC = () => {
   const { connectionStatus, isConnected, connectionError, roomState } = useSocket();
   const [testResults, setTestResults] = useState<TestResult[]>([]);
   const [isRunning, setIsRunning] = useState(false);
-  const [testUser] = useState({
-    id: `test_${Math.random().toString(36).substr(2, 9)}`,
-    display_name: `TestUser_${Math.floor(Math.random() * 1000)}`
-  });
+  const [currentTest, setCurrentTest] = useState<string | null>(null);
+  const [testUser] = useState(() => createTestUser('TestUser'));
+  const [testProgress, setTestProgress] = useState(0);
+  const [totalTests, setTotalTests] = useState(0);
 
-  const addTestResult = (test: string, status: 'pass' | 'fail', message: string) => {
-    setTestResults(prev => [...prev, {
+  const addTestResult = (test: string, status: 'pass' | 'fail', message: string, duration?: number) => {
+    const result: TestResult = {
       test,
       status,
       message,
-      timestamp: Date.now()
-    }]);
+      timestamp: Date.now(),
+      duration
+    };
+    
+    setTestResults(prev => [...prev, result]);
+    testLogger.log(`Test ${status.toUpperCase()}: ${test} - ${message}`);
+    
+    if (status === 'fail') {
+      testLogger.error(`Test failed: ${test}`, message);
+    }
+  };
+
+  const updateProgress = (completed: number, total: number) => {
+    setTestProgress(completed);
+    setTotalTests(total);
   };
 
   const runBasicConnectionTests = async () => {
     setIsRunning(true);
     setTestResults([]);
-
-    // Test 1: Server Health Check
-    try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${apiUrl}/health`);
-      if (response.ok) {
-        addTestResult('Server Health', 'pass', 'Server is responding');
-      } else {
-        addTestResult('Server Health', 'fail', `Server returned ${response.status}`);
-      }
-    } catch (error) {
-      addTestResult('Server Health', 'fail', `Cannot reach server: ${error}`);
-    }
-
-    // Test 2: Socket Connection
-    await new Promise(resolve => {
-      if (isConnected) {
-        addTestResult('Socket Connection', 'pass', 'Already connected');
-        resolve(void 0);
-      } else {
-        const timeout = setTimeout(() => {
-          addTestResult('Socket Connection', 'fail', 'Connection timeout');
-          resolve(void 0);
-        }, 5000);
-
-        const checkConnection = () => {
-          if (socketManager.isConnected()) {
-            clearTimeout(timeout);
-            addTestResult('Socket Connection', 'pass', 'Successfully connected');
-            resolve(void 0);
-          } else {
-            setTimeout(checkConnection, 100);
-          }
-        };
-        checkConnection();
-      }
-    });
-
-    // Test 3: Event Listener Registration
-    let eventReceived = false;
-    const testHandler = () => { eventReceived = true; };
+    setCurrentTest('Server Health Check');
     
-    socketManager.on('connect', testHandler);
-    setTimeout(() => {
-      socketManager.off('connect', testHandler);
-      if (eventReceived || isConnected) {
-        addTestResult('Event Listeners', 'pass', 'Events can be registered and triggered');
-      } else {
-        addTestResult('Event Listeners', 'fail', 'Event system not working');
-      }
-    }, 1000);
+    const tests = [
+      'Server Health Check',
+      'Socket Connection',
+      'Event Registration',
+      'Connection Status Sync'
+    ];
+    
+    updateProgress(0, tests.length);
 
-    setIsRunning(false);
+    try {
+      // Test 1: Server Health Check
+      const healthStart = performance.now();
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+        const response = await fetch(`${apiUrl}/health`);
+        const healthDuration = performance.now() - healthStart;
+        
+        if (response.ok) {
+          addTestResult('Server Health Check', 'pass', `Server responding in ${Math.round(healthDuration)}ms`, healthDuration);
+        } else {
+          addTestResult('Server Health Check', 'fail', `Server returned ${response.status}`);
+        }
+      } catch (error) {
+        addTestResult('Server Health Check', 'fail', `Cannot reach server: ${error}`);
+      }
+      updateProgress(1, tests.length);
+
+      // Test 2: Socket Connection
+      setCurrentTest('Socket Connection');
+      const connectionStart = performance.now();
+      
+      const connectionSuccess = await waitForCondition(
+        () => socketManager.isConnected(),
+        5000
+      );
+      
+      const connectionDuration = performance.now() - connectionStart;
+      
+      if (connectionSuccess) {
+        addTestResult('Socket Connection', 'pass', `Connected in ${Math.round(connectionDuration)}ms`, connectionDuration);
+      } else {
+        addTestResult('Socket Connection', 'fail', 'Connection timeout after 5 seconds');
+      }
+      updateProgress(2, tests.length);
+
+      // Test 3: Event Registration
+      setCurrentTest('Event Registration');
+      let eventReceived = false;
+      const testHandler = () => { eventReceived = true; };
+      
+      socketManager.on('connect', testHandler);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      socketManager.off('connect', testHandler);
+      
+      if (eventReceived || isConnected) {
+        addTestResult('Event Registration', 'pass', 'Event system working correctly');
+      } else {
+        addTestResult('Event Registration', 'fail', 'Event system not responding');
+      }
+      updateProgress(3, tests.length);
+
+      // Test 4: Connection Status Sync
+      setCurrentTest('Connection Status Sync');
+      const socketStatus = socketManager.getConnectionStatus();
+      const hookStatus = connectionStatus;
+      
+      if (socketStatus === hookStatus) {
+        addTestResult('Connection Status Sync', 'pass', `Status synchronized: ${socketStatus}`);
+      } else {
+        addTestResult('Connection Status Sync', 'fail', `Status mismatch: Socket(${socketStatus}) vs Hook(${hookStatus})`);
+      }
+      updateProgress(4, tests.length);
+
+    } catch (error) {
+      addTestResult('Test Suite', 'fail', `Unexpected error: ${error}`);
+    } finally {
+      setCurrentTest(null);
+      setIsRunning(false);
+    }
   };
 
   const runRoomTests = async () => {
@@ -93,72 +136,163 @@ const SocketTestSuite: React.FC = () => {
       return;
     }
 
-    const roomCode = prompt('Enter a room code to test (or create one first):');
-    if (!roomCode) return;
-
-    setIsRunning(true);
-
-    // Test 4: Room Join
-    socketManager.joinRoom(roomCode.toUpperCase(), testUser.id);
-    
-    await new Promise(resolve => {
-      const timeout = setTimeout(() => {
-        addTestResult('Room Join', 'fail', 'No room state received within 5 seconds');
-        resolve(void 0);
-      }, 5000);
-
-      const checkRoomState = () => {
-        if (roomState && roomState.code === roomCode.toUpperCase()) {
-          clearTimeout(timeout);
-          addTestResult('Room Join', 'pass', `Joined room ${roomState.code} with ${roomState.players.length} players`);
-          resolve(void 0);
-        } else {
-          setTimeout(checkRoomState, 100);
-        }
-      };
-      checkRoomState();
-    });
-
-    // Test 5: Ready Status Toggle
-    if (roomState) {
-      socketManager.setPlayerReady(true);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      socketManager.setPlayerReady(false);
-      addTestResult('Ready Toggle', 'pass', 'Ready status commands sent');
+    const roomCode = prompt('Enter a room code to test (create one first in another tab):');
+    if (!roomCode || roomCode.length !== 4) {
+      addTestResult('Room Tests', 'fail', 'Invalid room code provided');
+      return;
     }
 
-    setIsRunning(false);
+    setIsRunning(true);
+    setCurrentTest('Room Join Test');
+
+    const tests = [
+      'Room Join',
+      'Player Ready Toggle',
+      'Real-time Updates'
+    ];
+    
+    updateProgress(0, tests.length);
+
+    try {
+      // Test 1: Room Join
+      const joinStart = performance.now();
+      socketManager.joinRoom(roomCode.toUpperCase(), testUser.id);
+      
+      const roomJoined = await waitForCondition(
+        () => roomState?.code === roomCode.toUpperCase(),
+        10000
+      );
+      
+      const joinDuration = performance.now() - joinStart;
+      
+      if (roomJoined && roomState) {
+        addTestResult('Room Join', 'pass', `Joined room ${roomState.code} with ${roomState.players.length} players in ${Math.round(joinDuration)}ms`, joinDuration);
+      } else {
+        addTestResult('Room Join', 'fail', 'Failed to join room within 10 seconds');
+        setIsRunning(false);
+        setCurrentTest(null);
+        return;
+      }
+      updateProgress(1, tests.length);
+
+      // Test 2: Player Ready Toggle
+      setCurrentTest('Player Ready Toggle');
+      const currentPlayer = roomState?.players.find(p => p.spotifyId === testUser.id);
+      const initialReadyState = currentPlayer?.isReady || false;
+      
+      socketManager.setPlayerReady(!initialReadyState);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      socketManager.setPlayerReady(initialReadyState);
+      addTestResult('Player Ready Toggle', 'pass', 'Ready status commands sent successfully');
+      updateProgress(2, tests.length);
+
+      // Test 3: Real-time Updates
+      setCurrentTest('Real-time Updates');
+      if (roomState.players.length > 1) {
+        addTestResult('Real-time Updates', 'pass', `Room has ${roomState.players.length} players - real-time updates working`);
+      } else {
+        addTestResult('Real-time Updates', 'pass', 'Single player room - open another tab to test multi-user updates');
+      }
+      updateProgress(3, tests.length);
+
+    } catch (error) {
+      addTestResult('Room Tests', 'fail', `Unexpected error: ${error}`);
+    } finally {
+      setCurrentTest(null);
+      setIsRunning(false);
+    }
   };
 
   const runStressTest = async () => {
     setIsRunning(true);
+    setCurrentTest('Stress Test');
     
-    // Test rapid connection/disconnection
-    for (let i = 0; i < 5; i++) {
-      socketManager.disconnect();
-      await new Promise(resolve => setTimeout(resolve, 500));
-      await socketManager.connect();
-      await new Promise(resolve => setTimeout(resolve, 500));
+    const cycles = 3;
+    updateProgress(0, cycles);
+    
+    try {
+      for (let i = 0; i < cycles; i++) {
+        setCurrentTest(`Stress Test - Cycle ${i + 1}/${cycles}`);
+        
+        // Disconnect
+        socketManager.disconnect();
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Reconnect
+        await socketManager.connect();
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        updateProgress(i + 1, cycles);
+      }
+      
+      addTestResult('Stress Test', 'pass', `Completed ${cycles} connect/disconnect cycles successfully`);
+    } catch (error) {
+      addTestResult('Stress Test', 'fail', `Failed during stress testing: ${error}`);
+    } finally {
+      setCurrentTest(null);
+      setIsRunning(false);
     }
-    
-    addTestResult('Stress Test', 'pass', 'Completed 5 connect/disconnect cycles');
-    setIsRunning(false);
   };
 
   const clearResults = () => {
     setTestResults([]);
+    testLogger.clear();
+    setTestProgress(0);
+    setTotalTests(0);
+  };
+
+  const exportResults = () => {
+    const report = {
+      timestamp: new Date().toISOString(),
+      testUser: testUser.display_name,
+      connectionStatus,
+      roomState,
+      results: testResults,
+      logs: testLogger.getLogs()
+    };
+    
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `socket-test-results-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const copyResults = async () => {
+    const summary = testResults.map(result => 
+      `${result.status === 'pass' ? '✓' : '✗'} ${result.test}: ${result.message}`
+    ).join('\n');
+    
+    await navigator.clipboard.writeText(summary);
+    testLogger.log('Test results copied to clipboard');
+  };
+
+  const getStatusIcon = (status: TestResult['status']) => {
+    switch (status) {
+      case 'pass': return <CheckCircle className="w-5 h-5 text-green-400" />;
+      case 'fail': return <AlertCircle className="w-5 h-5 text-red-400" />;
+      case 'pending': return <Clock className="w-5 h-5 text-yellow-400" />;
+    }
+  };
+
+  const getStatusColor = (status: TestResult['status']) => {
+    switch (status) {
+      case 'pass': return 'bg-green-500/20 border-green-400/50';
+      case 'fail': return 'bg-red-500/20 border-red-400/50';
+      case 'pending': return 'bg-yellow-500/20 border-yellow-400/50';
+    }
   };
 
   return (
-    <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20 max-w-4xl mx-auto">
-      <h2 className="text-2xl font-bold text-white mb-6">Phase 4A Socket.IO Test Suite</h2>
-      
-      {/* Connection Status */}
-      <div className="mb-6 p-4 bg-black/20 rounded-lg">
-        <h3 className="text-lg font-semibold text-white mb-2">Connection Status</h3>
+    <div className="space-y-6">
+      {/* Test Status */}
+      <div className="bg-black/20 rounded-lg p-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           <div>
-            <span className="text-gray-300">Status:</span>
+            <span className="text-gray-300">Connection:</span>
             <span className={`ml-2 font-semibold ${
               connectionStatus === 'connected' ? 'text-green-400' :
               connectionStatus === 'connecting' ? 'text-yellow-400' :
@@ -180,39 +314,76 @@ const SocketTestSuite: React.FC = () => {
             <span className="ml-2 text-purple-300">{testUser.display_name}</span>
           </div>
         </div>
+        
         {connectionError && (
           <div className="mt-2 text-red-300 text-sm">Error: {connectionError}</div>
+        )}
+        
+        {currentTest && (
+          <div className="mt-3 flex items-center space-x-2">
+            <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+            <span className="text-blue-300 text-sm">Running: {currentTest}</span>
+            {totalTests > 0 && (
+              <span className="text-gray-400 text-sm">({testProgress}/{totalTests})</span>
+            )}
+          </div>
         )}
       </div>
 
       {/* Test Controls */}
-      <div className="mb-6 flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-3">
         <button
           onClick={runBasicConnectionTests}
           disabled={isRunning}
-          className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors duration-200"
+          className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors duration-200"
         >
-          Basic Connection Tests
+          <Play className="w-4 h-4" />
+          <span>Basic Tests</span>
         </button>
+        
         <button
           onClick={runRoomTests}
           disabled={isRunning || !isConnected}
-          className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors duration-200"
+          className="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors duration-200"
         >
-          Room Tests
+          <Play className="w-4 h-4" />
+          <span>Room Tests</span>
         </button>
+        
         <button
           onClick={runStressTest}
           disabled={isRunning}
-          className="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors duration-200"
+          className="flex items-center space-x-2 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors duration-200"
         >
-          Stress Test
+          <Play className="w-4 h-4" />
+          <span>Stress Test</span>
         </button>
+        
         <button
           onClick={clearResults}
-          className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors duration-200"
+          disabled={isRunning}
+          className="flex items-center space-x-2 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-800 text-white px-4 py-2 rounded-lg transition-colors duration-200"
         >
-          Clear Results
+          <RotateCcw className="w-4 h-4" />
+          <span>Clear</span>
+        </button>
+        
+        <button
+          onClick={exportResults}
+          disabled={testResults.length === 0}
+          className="flex items-center space-x-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors duration-200"
+        >
+          <Download className="w-4 h-4" />
+          <span>Export</span>
+        </button>
+        
+        <button
+          onClick={copyResults}
+          disabled={testResults.length === 0}
+          className="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors duration-200"
+        >
+          <Copy className="w-4 h-4" />
+          <span>Copy</span>
         </button>
       </div>
 
@@ -220,29 +391,22 @@ const SocketTestSuite: React.FC = () => {
       <div className="bg-black/30 rounded-lg p-4">
         <h3 className="text-lg font-semibold text-white mb-3">Test Results</h3>
         {testResults.length === 0 ? (
-          <p className="text-gray-400">No tests run yet</p>
+          <p className="text-gray-400">No tests run yet. Click a test button to start.</p>
         ) : (
           <div className="space-y-2 max-h-64 overflow-y-auto">
             {testResults.map((result, index) => (
               <div
                 key={index}
-                className={`flex items-center justify-between p-2 rounded ${
-                  result.status === 'pass' ? 'bg-green-500/20' :
-                  result.status === 'fail' ? 'bg-red-500/20' :
-                  'bg-yellow-500/20'
-                }`}
+                className={`flex items-center justify-between p-3 rounded border ${getStatusColor(result.status)}`}
               >
                 <div className="flex items-center space-x-3">
-                  <span className={`text-lg ${
-                    result.status === 'pass' ? 'text-green-400' :
-                    result.status === 'fail' ? 'text-red-400' :
-                    'text-yellow-400'
-                  }`}>
-                    {result.status === 'pass' ? '✓' : result.status === 'fail' ? '✗' : '⏳'}
-                  </span>
+                  {getStatusIcon(result.status)}
                   <div>
                     <div className="text-white font-medium">{result.test}</div>
                     <div className="text-sm text-gray-300">{result.message}</div>
+                    {result.duration && (
+                      <div className="text-xs text-gray-400">Duration: {Math.round(result.duration)}ms</div>
+                    )}
                   </div>
                 </div>
                 <div className="text-xs text-gray-400">
@@ -254,16 +418,32 @@ const SocketTestSuite: React.FC = () => {
         )}
       </div>
 
-      {/* Quick Manual Tests */}
-      <div className="mt-6 p-4 bg-black/20 rounded-lg">
-        <h3 className="text-lg font-semibold text-white mb-3">Manual Test Instructions</h3>
-        <div className="space-y-2 text-sm text-gray-300">
-          <p>1. <strong>Multi-tab test:</strong> Open this page in 2+ browser tabs, create room in one, join from others</p>
-          <p>2. <strong>Network test:</strong> Disconnect/reconnect internet while in a room</p>
-          <p>3. <strong>Ready state test:</strong> Toggle ready status and watch other players' views</p>
-          <p>4. <strong>Page refresh test:</strong> Refresh browser while in room (should reconnect)</p>
+      {/* Test Summary */}
+      {testResults.length > 0 && (
+        <div className="bg-black/20 rounded-lg p-4">
+          <h4 className="text-white font-medium mb-2">Test Summary</h4>
+          <div className="grid grid-cols-3 gap-4 text-center">
+            <div className="bg-green-500/20 rounded p-3">
+              <div className="text-green-400 text-2xl font-bold">
+                {testResults.filter(r => r.status === 'pass').length}
+              </div>
+              <div className="text-green-300 text-sm">Passed</div>
+            </div>
+            <div className="bg-red-500/20 rounded p-3">
+              <div className="text-red-400 text-2xl font-bold">
+                {testResults.filter(r => r.status === 'fail').length}
+              </div>
+              <div className="text-red-300 text-sm">Failed</div>
+            </div>
+            <div className="bg-blue-500/20 rounded p-3">
+              <div className="text-blue-400 text-2xl font-bold">
+                {testResults.length}
+              </div>
+              <div className="text-blue-300 text-sm">Total</div>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

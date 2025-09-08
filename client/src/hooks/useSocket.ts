@@ -17,30 +17,28 @@ interface RoomState {
 }
 
 interface UseSocketReturn {
-  // Connection state
   connectionStatus: 'disconnected' | 'connecting' | 'connected';
   isConnected: boolean;
   connectionError: string | null;
   
-  // Room state
   roomState: RoomState | null;
   
-  // Actions
   connect: () => Promise<void>;
   disconnect: () => void;
-  joinRoom: (roomCode: string, spotifyId: string) => void;
+  joinRoom: (roomCode: string, spotifyId: string, musicData?: any) => void;
   setPlayerReady: (isReady: boolean) => void;
+  attemptReconnection: () => Promise<boolean>;
+  clearReconnectionData: () => void;
   
-  // Game actions (for host)
   startGame: (gameId: string, totalQuestions: number) => void;
   sendQuestion: (questionData: any) => void;
   submitAnswer: (questionNumber: number, selectedAnswer: number, responseTime: number) => void;
   sendResults: (resultData: any) => void;
   
-  // Event handlers
-  onPlayerConnected: (callback: (data: any) => void) => void;
-  onPlayerDisconnected: (callback: (data: any) => void) => void;
-  onGameStarting: (callback: (data: any) => void) => void;
+  onPlayerConnected: (callback: (data: any) => void) => () => void;
+  onPlayerDisconnected: (callback: (data: any) => void) => () => void;
+  onPlayerReconnected: (callback: (data: any) => void) => () => void;
+  onGameStarting: (callback: (data: any) => void) => () => void;
 }
 
 export function useSocket(): UseSocketReturn {
@@ -48,7 +46,6 @@ export function useSocket(): UseSocketReturn {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [roomState, setRoomState] = useState<RoomState | null>(null);
 
-  // Connect to Socket.IO server
   const connect = useCallback(async () => {
     try {
       setConnectionStatus('connecting');
@@ -57,8 +54,8 @@ export function useSocket(): UseSocketReturn {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
       await socketManager.connect(apiUrl);
       
+      // Update status after successful connection
       setConnectionStatus('connected');
-      console.log('Socket connection established');
       
     } catch (error) {
       setConnectionStatus('disconnected');
@@ -67,26 +64,31 @@ export function useSocket(): UseSocketReturn {
     }
   }, []);
 
-  // Disconnect from server
   const disconnect = useCallback(() => {
     socketManager.disconnect();
     setConnectionStatus('disconnected');
     setRoomState(null);
+    setConnectionError(null);
     console.log('Socket disconnected');
   }, []);
 
-  // Join room
-  const joinRoom = useCallback((roomCode: string, spotifyId: string) => {
+  const joinRoom = useCallback((roomCode: string, spotifyId: string, musicData?: any) => {
     console.log(`Attempting to join room ${roomCode}`);
-    socketManager.joinRoom(roomCode, spotifyId);
+    socketManager.joinRoom(roomCode, spotifyId, musicData);
   }, []);
 
-  // Set player ready status
   const setPlayerReady = useCallback((isReady: boolean) => {
     socketManager.setPlayerReady(isReady);
   }, []);
 
-  // Game actions
+  const attemptReconnection = useCallback(async () => {
+    return await socketManager.attemptReconnection();
+  }, []);
+
+  const clearReconnectionData = useCallback(() => {
+    socketManager.clearReconnectionData();
+  }, []);
+
   const startGame = useCallback((gameId: string, totalQuestions: number) => {
     socketManager.startGame(gameId, totalQuestions);
   }, []);
@@ -103,7 +105,6 @@ export function useSocket(): UseSocketReturn {
     socketManager.sendResults(resultData);
   }, []);
 
-  // Event handler registration
   const onPlayerConnected = useCallback((callback: (data: any) => void) => {
     socketManager.on('player-connected', callback);
     return () => socketManager.off('player-connected', callback);
@@ -114,23 +115,42 @@ export function useSocket(): UseSocketReturn {
     return () => socketManager.off('player-disconnected', callback);
   }, []);
 
+  const onPlayerReconnected = useCallback((callback: (data: any) => void) => {
+    socketManager.on('player-reconnected', callback);
+    return () => socketManager.off('player-reconnected', callback);
+  }, []);
+
   const onGameStarting = useCallback((callback: (data: any) => void) => {
     socketManager.on('game-starting', callback);
     return () => socketManager.off('game-starting', callback);
   }, []);
 
-  // Set up core event listeners
+  // Sync connection status with socketManager
   useEffect(() => {
-    // Connection events
+    const syncStatus = () => {
+      const managerStatus = socketManager.getConnectionStatus();
+      if (managerStatus !== connectionStatus) {
+        setConnectionStatus(managerStatus);
+      }
+    };
+
+    // Check status every 100ms to keep in sync
+    const statusInterval = setInterval(syncStatus, 100);
+    
+    return () => clearInterval(statusInterval);
+  }, [connectionStatus]);
+
+  useEffect(() => {
     const handleConnect = () => {
       setConnectionStatus('connected');
       setConnectionError(null);
-      console.log('Socket connected');
+      console.log('Socket connected successfully');
     };
 
     const handleDisconnect = () => {
       setConnectionStatus('disconnected');
       setRoomState(null);
+      setConnectionError(null);
       console.log('Socket disconnected');
     };
 
@@ -139,10 +159,35 @@ export function useSocket(): UseSocketReturn {
       console.error('Socket error:', error);
     };
 
-    // Room events
     const handleRoomState = (data: { room: RoomState }) => {
       console.log('Room state updated:', data.room);
       setRoomState(data.room);
+    };
+
+    const handlePlayerConnected = (data: { playerId: string; displayName: string }) => {
+      console.log('Player connected:', data.displayName);
+    };
+
+    const handlePlayerDisconnected = (data: { playerId: string; displayName: string; isHost: boolean }) => {
+      console.log('Player disconnected:', data.displayName);
+      
+      if (data.isHost) {
+        setConnectionError('Host left the room');
+        setRoomState(null);
+        return;
+      }
+
+      setRoomState(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          players: prev.players.filter(p => p.id !== data.playerId)
+        };
+      });
+    };
+
+    const handlePlayerReconnected = (data: { playerId: string; displayName: string }) => {
+      console.log('Player reconnected:', data.displayName);
     };
 
     const handlePlayerReadyUpdate = (data: { spotifyId: string; isReady: boolean }) => {
@@ -161,27 +206,32 @@ export function useSocket(): UseSocketReturn {
       });
     };
 
-    // Register event listeners
+    // Register all event listeners
     socketManager.on('connect', handleConnect);
     socketManager.on('disconnect', handleDisconnect);
     socketManager.on('error', handleError);
     socketManager.on('room-state', handleRoomState);
+    socketManager.on('player-connected', handlePlayerConnected);
+    socketManager.on('player-disconnected', handlePlayerDisconnected);
+    socketManager.on('player-reconnected', handlePlayerReconnected);
     socketManager.on('player-ready-update', handlePlayerReadyUpdate);
 
-    // Cleanup on unmount
+    // Cleanup function
     return () => {
       socketManager.off('connect', handleConnect);
       socketManager.off('disconnect', handleDisconnect);
       socketManager.off('error', handleError);
       socketManager.off('room-state', handleRoomState);
+      socketManager.off('player-connected', handlePlayerConnected);
+      socketManager.off('player-disconnected', handlePlayerDisconnected);
+      socketManager.off('player-reconnected', handlePlayerReconnected);
       socketManager.off('player-ready-update', handlePlayerReadyUpdate);
     };
   }, []);
 
-  // Auto-connect on mount if not connected
+  // Auto-connect logic - only attempt if disconnected
   useEffect(() => {
     if (connectionStatus === 'disconnected') {
-      // Small delay to prevent connection spam
       const timer = setTimeout(() => {
         connect();
       }, 500);
@@ -191,27 +241,26 @@ export function useSocket(): UseSocketReturn {
   }, [connect, connectionStatus]);
 
   return {
-    // State
     connectionStatus,
     isConnected: connectionStatus === 'connected',
     connectionError,
     roomState,
     
-    // Actions
     connect,
     disconnect,
     joinRoom,
     setPlayerReady,
+    attemptReconnection,
+    clearReconnectionData,
     
-    // Game actions
     startGame,
     sendQuestion,
     submitAnswer,
     sendResults,
     
-    // Event handlers
     onPlayerConnected,
     onPlayerDisconnected,
+    onPlayerReconnected,
     onGameStarting
   };
 }
