@@ -26,7 +26,7 @@ export function setupGameSocket(io: Server, prisma: PrismaClient) {
         // Verify room exists and is active
         const room = await prisma.room.findUnique({
           where: { code: roomCode.toUpperCase() },
-          include: { players: true }
+          include: { players: { orderBy: { joinedAt: 'asc' } } }
         });
 
         if (!room) {
@@ -41,6 +41,7 @@ export function setupGameSocket(io: Server, prisma: PrismaClient) {
 
         // Find existing player or prepare for new player
         let player = room.players.find(p => p.spotifyId === spotifyId);
+        let isNewPlayer = false;
         
         if (player) {
           // Existing player reconnecting via Socket.IO
@@ -59,8 +60,7 @@ export function setupGameSocket(io: Server, prisma: PrismaClient) {
           }
         } else {
           // New player - this should only happen in test scenarios
-          // In normal flow, players join via HTTP API first
-          console.log(`New player ${spotifyId} joining room ${room.code} directly via Socket.IO`);
+          console.log(`New player ${spotifyId} joining room ${room.code} directly via Socket.IO (test mode)`);
           
           if (room.status !== 'WAITING') {
             socket.emit('error', { message: 'Game already in progress' });
@@ -72,13 +72,12 @@ export function setupGameSocket(io: Server, prisma: PrismaClient) {
             return;
           }
 
-          // Allow direct socket join for testing purposes
-          // Create the player record
+          // Create the player record for testing
           player = await prisma.roomPlayer.create({
             data: {
               roomId: room.id,
               spotifyId,
-              displayName: `Player_${spotifyId.slice(-4)}`, // Fallback name
+              displayName: `TestPlayer_${spotifyId.slice(-4)}`,
               imageUrl: null,
               isHost: false,
               isReady: false,
@@ -88,7 +87,8 @@ export function setupGameSocket(io: Server, prisma: PrismaClient) {
             }
           });
 
-          console.log(`Created new player ${player.displayName} via Socket.IO join`);
+          isNewPlayer = true;
+          console.log(`Created new test player ${player.displayName} via Socket.IO`);
         }
 
         // Store connection info on socket
@@ -97,43 +97,124 @@ export function setupGameSocket(io: Server, prisma: PrismaClient) {
         socket.playerId = player.id;
 
         // Join socket room
-        socket.join(room.code);
+        await socket.join(room.code);
+        console.log(`Player ${player.displayName} connected to Socket.IO room ${room.code}`);
 
-        console.log(`Player ${player.displayName} connected to room ${room.code}`);
-
-        // Get updated room data including the new player
+        // Get updated room data including any new player
         const updatedRoom = await prisma.room.findUnique({
           where: { code: room.code },
           include: { players: { orderBy: { joinedAt: 'asc' } } }
         });
 
         if (updatedRoom) {
-          // Send current room state to new connection
-          socket.emit('room-state', {
-            room: {
-              code: updatedRoom.code,
-              status: updatedRoom.status,
-              players: updatedRoom.players.map(p => ({
-                id: p.id,
-                displayName: p.displayName,
-                imageUrl: p.imageUrl,
-                isHost: p.isHost,
-                isReady: p.isReady,
-                spotifyId: p.spotifyId
-              }))
-            }
-          });
+          const roomStateData = {
+            code: updatedRoom.code,
+            status: updatedRoom.status,
+            players: updatedRoom.players.map(p => ({
+              id: p.id,
+              displayName: p.displayName,
+              imageUrl: p.imageUrl,
+              isHost: p.isHost,
+              isReady: p.isReady,
+              spotifyId: p.spotifyId
+            }))
+          };
 
-          // Notify others of connection (but not the connecting player)
-          socket.to(room.code).emit('player-connected', {
-            playerId: player.id,
-            displayName: player.displayName
-          });
+          // Send current room state to connecting player
+          socket.emit('room-state', { room: roomStateData });
+
+          // If this is a new player, broadcast updated room state to everyone
+          if (isNewPlayer) {
+            // Notify all players (including the new one) of the updated player list
+            io.to(room.code).emit('room-state', { room: roomStateData });
+            
+            // Also send specific player-joined event
+            socket.to(room.code).emit('player-connected', {
+              playerId: player.id,
+              displayName: player.displayName
+            });
+          } else {
+            // Existing player reconnecting - just notify others
+            socket.to(room.code).emit('player-reconnected', {
+              playerId: player.id,
+              displayName: player.displayName
+            });
+          }
         }
+
+        // Send success confirmation to the connecting player
+        socket.emit('join-room-success', {
+          playerId: player.id,
+          roomCode: room.code,
+          isNewPlayer
+        });
 
       } catch (error) {
         console.error('Error joining room:', error);
         socket.emit('error', { message: 'Failed to join room' });
+      }
+    });
+
+    // Player ready status update with real-time broadcast
+    socket.on('player-ready', async (data) => {
+      try {
+        const { isReady } = data;
+        
+        if (!socket.roomCode || !socket.spotifyId) {
+          socket.emit('error', { message: 'Not connected to room' });
+          return;
+        }
+
+        const room = await prisma.room.findUnique({
+          where: { code: socket.roomCode },
+          include: { players: { orderBy: { joinedAt: 'asc' } } }
+        });
+
+        if (!room) {
+          socket.emit('error', { message: 'Room not found' });
+          return;
+        }
+
+        // Update player ready status
+        await prisma.roomPlayer.update({
+          where: {
+            roomId_spotifyId: {
+              roomId: room.id,
+              spotifyId: socket.spotifyId
+            }
+          },
+          data: { isReady }
+        });
+
+        // Get updated room data
+        const updatedRoom = await prisma.room.findUnique({
+          where: { code: socket.roomCode },
+          include: { players: { orderBy: { joinedAt: 'asc' } } }
+        });
+
+        if (updatedRoom) {
+          // Broadcast complete room state to ensure consistency
+          const roomStateData = {
+            code: updatedRoom.code,
+            status: updatedRoom.status,
+            players: updatedRoom.players.map(p => ({
+              id: p.id,
+              displayName: p.displayName,
+              imageUrl: p.imageUrl,
+              isHost: p.isHost,
+              isReady: p.isReady,
+              spotifyId: p.spotifyId
+            }))
+          };
+
+          io.to(socket.roomCode).emit('room-state', { room: roomStateData });
+        }
+
+        console.log(`Player ${socket.spotifyId} ready status updated: ${isReady}`);
+
+      } catch (error) {
+        console.error('Error updating ready status:', error);
+        socket.emit('error', { message: 'Failed to update ready status' });
       }
     });
 
@@ -221,6 +302,7 @@ export function setupGameSocket(io: Server, prisma: PrismaClient) {
             // Notify all players that game has started
             io.to(socket.roomCode!).emit('game-started', {
               gameId: game.id,
+              roomCode: room.code,
               totalQuestions: game.totalQuestions,
               players: room.players.map(p => ({
                 id: p.id,
@@ -245,58 +327,14 @@ export function setupGameSocket(io: Server, prisma: PrismaClient) {
       }
     });
 
-    // Player ready status update
-    socket.on('player-ready', async (data) => {
-      try {
-        const { isReady } = data;
-        
-        if (!socket.roomCode || !socket.spotifyId) {
-          socket.emit('error', { message: 'Not connected to room' });
-          return;
-        }
-
-        const room = await prisma.room.findUnique({
-          where: { code: socket.roomCode }
-        });
-
-        if (!room) {
-          socket.emit('error', { message: 'Room not found' });
-          return;
-        }
-
-        // Update player ready status
-        await prisma.roomPlayer.update({
-          where: {
-            roomId_spotifyId: {
-              roomId: room.id,
-              spotifyId: socket.spotifyId
-            }
-          },
-          data: { isReady }
-        });
-
-        // Broadcast to room
-        io.to(socket.roomCode).emit('player-ready-update', {
-          spotifyId: socket.spotifyId,
-          isReady
-        });
-
-        console.log(`Player ${socket.spotifyId} ready status: ${isReady}`);
-
-      } catch (error) {
-        console.error('Error updating ready status:', error);
-        socket.emit('error', { message: 'Failed to update ready status' });
-      }
-    });
-
-    // Reconnection handler (keep existing logic)
+    // Keep existing handlers for reconnection, disconnect, etc.
     socket.on('reconnect-to-room', async (data) => {
       try {
         const { roomCode, spotifyId, reconnectionToken, deviceId } = data;
         
         const room = await prisma.room.findUnique({
           where: { code: roomCode.toUpperCase() },
-          include: { players: true }
+          include: { players: { orderBy: { joinedAt: 'asc' } } }
         });
 
         if (!room || !room.isActive) {
@@ -324,7 +362,7 @@ export function setupGameSocket(io: Server, prisma: PrismaClient) {
         socket.roomCode = room.code;
         socket.spotifyId = spotifyId;
         socket.playerId = player.id;
-        socket.join(room.code);
+        await socket.join(room.code);
 
         await prisma.roomPlayer.update({
           where: { id: player.id },
@@ -333,20 +371,21 @@ export function setupGameSocket(io: Server, prisma: PrismaClient) {
 
         console.log(`Player ${player.displayName} reconnected to room ${room.code}`);
 
-        socket.emit('room-state', {
-          room: {
-            code: room.code,
-            status: room.status,
-            players: room.players.map(p => ({
-              id: p.id,
-              displayName: p.displayName,
-              imageUrl: p.imageUrl,
-              isHost: p.isHost,
-              isReady: p.isReady,
-              spotifyId: p.spotifyId
-            }))
-          }
-        });
+        // Send current room state
+        const roomStateData = {
+          code: room.code,
+          status: room.status,
+          players: room.players.map(p => ({
+            id: p.id,
+            displayName: p.displayName,
+            imageUrl: p.imageUrl,
+            isHost: p.isHost,
+            isReady: p.isReady,
+            spotifyId: p.spotifyId
+          }))
+        };
+
+        socket.emit('room-state', { room: roomStateData });
 
         socket.to(room.code).emit('player-reconnected', {
           playerId: player.id,
@@ -359,9 +398,6 @@ export function setupGameSocket(io: Server, prisma: PrismaClient) {
       }
     });
 
-    // Keep all other existing handlers (game events, disconnect, etc.)
-    // ... [rest of existing socket handlers] ...
-
     // Player disconnection
     socket.on('disconnect', async () => {
       console.log('Client disconnected:', socket.id);
@@ -370,13 +406,29 @@ export function setupGameSocket(io: Server, prisma: PrismaClient) {
         try {
           const room = await prisma.room.findUnique({
             where: { code: socket.roomCode },
-            include: { players: true }
+            include: { players: { orderBy: { joinedAt: 'asc' } } }
           });
 
           if (room) {
             const player = room.players.find(p => p.spotifyId === socket.spotifyId);
             
             if (player) {
+              // Broadcast updated room state on disconnect
+              const roomStateData = {
+                code: room.code,
+                status: room.status,
+                players: room.players.map(p => ({
+                  id: p.id,
+                  displayName: p.displayName,
+                  imageUrl: p.imageUrl,
+                  isHost: p.isHost,
+                  isReady: p.isReady,
+                  spotifyId: p.spotifyId
+                }))
+              };
+
+              socket.to(socket.roomCode).emit('room-state', { room: roomStateData });
+              
               socket.to(socket.roomCode).emit('player-disconnected', {
                 playerId: player.id,
                 displayName: player.displayName,

@@ -5,13 +5,22 @@ import { useSocket } from '../hooks/useSocket';
 import { socketManager } from '../utils/socketManager';
 import ConnectionStatus from '../components/ConnectionStatus';
 
+interface GameSession {
+  roomCode: string;
+  gameId: string;
+  timestamp: number;
+}
+
 interface GameRoomProps {
   user: SpotifyUser;
   roomCode: string | null;
+  activeGameSession: GameSession | null;
   onLeaveGame: () => void;
+  onGameStarted: (gameId: string, roomCode: string) => void;
+  onGameEnded: () => void;
 }
 
-const GameRoom: React.FC<GameRoomProps> = ({ user, roomCode, onLeaveGame }) => {
+const GameRoom: React.FC<GameRoomProps> = ({ user, roomCode, activeGameSession, onLeaveGame, onGameStarted, onGameEnded }) => {
   const { 
     connectionStatus, 
     isConnected, 
@@ -47,7 +56,12 @@ const GameRoom: React.FC<GameRoomProps> = ({ user, roomCode, onLeaveGame }) => {
     const handleGameStarted = (data: { gameId: string; totalQuestions: number }) => {
       setIsStartingGame(false);
       setGameStartStatus(`Game started! ${data.totalQuestions} questions incoming...`);
-      // Here you would navigate to the actual game interface
+      
+      // Notify parent component about game start
+      if (onGameStarted && roomCode) {
+        onGameStarted(data.gameId, roomCode);
+      }
+      
       setTimeout(() => {
         setGameStartStatus(null);
         // TODO: Navigate to game play interface

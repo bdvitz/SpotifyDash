@@ -25,6 +25,7 @@ interface SocketEvents {
   'player-disconnected': (data: { playerId: string; displayName: string; isHost: boolean }) => void;
   'player-ready-update': (data: { spotifyId: string; isReady: boolean }) => void;
   'player-reconnected': (data: { playerId: string; displayName: string }) => void;
+  'join-room-success': (data: { playerId: string; roomCode: string; isNewPlayer: boolean }) => void;
   
   'game-start-initiated': (data: { hostName: string; playerCount: number; estimatedLoadTime: number }) => void;
   'game-started': (data: { gameId: string; totalQuestions: number; players: any[] }) => void;

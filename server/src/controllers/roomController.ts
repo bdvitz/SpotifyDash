@@ -4,14 +4,33 @@ import { PrismaClient } from '@prisma/client';
 const router = Router();
 const prisma = new PrismaClient();
 
-// Generate 4-character room code
-function generateRoomCode(): string {
+// Generate collision-free 4-character room code
+async function generateUniqueRoomCode(): Promise<string> {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  let result = '';
-  for (let i = 0; i < 4; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  let attempts = 0;
+  const maxAttempts = 50;
+  
+  while (attempts < maxAttempts) {
+    let code = '';
+    for (let i = 0; i < 4; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    
+    const existing = await prisma.room.findUnique({ 
+      where: { code },
+      select: { id: true }
+    });
+    
+    if (!existing) {
+      console.log(`Generated unique room code: ${code} (attempt ${attempts + 1})`);
+      return code;
+    }
+    
+    attempts++;
+    console.log(`Room code ${code} already exists, retrying... (attempt ${attempts})`);
   }
-  return result;
+  
+  throw new Error(`Failed to generate unique room code after ${maxAttempts} attempts`);
 }
 
 // Create new room
@@ -23,21 +42,8 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // Generate unique room code
-    let roomCode: string;
-    let attempts = 0;
-    do {
-      roomCode = generateRoomCode();
-      attempts++;
-      const existing = await prisma.room.findUnique({ where: { code: roomCode } });
-      if (!existing) break;
-    } while (attempts < 10);
+    const roomCode = await generateUniqueRoomCode();
 
-    if (attempts >= 10) {
-      return res.status(500).json({ error: 'Could not generate unique room code' });
-    }
-
-    // Create room and host player in transaction
     const result = await prisma.$transaction(async (tx) => {
       const room = await tx.room.create({
         data: {
@@ -54,7 +60,7 @@ router.post('/', async (req: Request, res: Response) => {
           displayName,
           imageUrl: imageUrl || null,
           isHost: true,
-          isReady: true // Host is automatically ready
+          isReady: true
         }
       });
 
@@ -78,7 +84,12 @@ router.post('/', async (req: Request, res: Response) => {
 
   } catch (error) {
     console.error('Error creating room:', error);
-    res.status(500).json({ error: 'Failed to create room' });
+    
+    if (error instanceof Error && error.message.includes('Failed to generate unique room code')) {
+      res.status(503).json({ error: 'Service temporarily unavailable - please try again' });
+    } else {
+      res.status(500).json({ error: 'Failed to create room' });
+    }
   }
 });
 
@@ -103,7 +114,7 @@ router.get('/:code', async (req: Request, res: Response) => {
           orderBy: { joinedAt: 'asc' }
         },
         games: {
-          where: { status: 'IN_PROGRESS' },
+          where: { status: { in: ['STARTING', 'IN_PROGRESS', 'PAUSED'] } },
           select: { id: true, status: true, currentQuestion: true }
         }
       }
@@ -126,7 +137,7 @@ router.get('/:code', async (req: Request, res: Response) => {
       players: room.players,
       currentGame: room.games[0] || null,
       createdAt: room.createdAt,
-      playerCount: room.players.length // Include total player count
+      playerCount: room.players.length
     });
 
   } catch (error) {
@@ -135,7 +146,7 @@ router.get('/:code', async (req: Request, res: Response) => {
   }
 });
 
-// Join room
+// Join room - UPDATED to allow rejoining games in progress
 router.post('/:code/join', async (req: Request, res: Response) => {
   try {
     const { code } = req.params;
@@ -148,7 +159,10 @@ router.post('/:code/join', async (req: Request, res: Response) => {
     const room = await prisma.room.findUnique({
       where: { code: code.toUpperCase() },
       include: {
-        players: true
+        players: true,
+        games: {
+          where: { status: { in: ['STARTING', 'IN_PROGRESS', 'PAUSED'] } }
+        }
       }
     });
 
@@ -160,18 +174,12 @@ router.post('/:code/join', async (req: Request, res: Response) => {
       return res.status(410).json({ error: 'Room is no longer active' });
     }
 
-    if (room.status !== 'WAITING') {
-      return res.status(409).json({ error: 'Game already in progress' });
-    }
-
-    if (room.players.length >= room.maxPlayers) {
-      return res.status(409).json({ error: 'Room is full' });
-    }
-
-    // Check if player already in room
+    // Check if player already in room (ALLOW REJOINING)
     const existingPlayer = room.players.find(p => p.spotifyId === spotifyId);
     if (existingPlayer) {
-      // Return existing player info instead of error
+      console.log(`Player ${displayName} rejoining room ${code} (status: ${room.status})`);
+      
+      // Return existing player info - no error for game in progress
       return res.json({
         roomId: room.id,
         player: {
@@ -183,8 +191,21 @@ router.post('/:code/join', async (req: Request, res: Response) => {
           isReady: existingPlayer.isReady
         },
         playerCount: room.players.length,
-        message: 'Player already in room'
+        currentGame: room.games[0] || null,
+        message: room.status === 'IN_GAME' ? 'Rejoined game in progress' : 'Player already in room'
       });
+    }
+
+    // For NEW players, prevent joining if game has started
+    if (room.status === 'IN_GAME' || room.status === 'STARTING') {
+      return res.status(409).json({ 
+        error: 'Cannot join - game already in progress',
+        canSpectate: true // Future feature
+      });
+    }
+
+    if (room.players.length >= room.maxPlayers) {
+      return res.status(409).json({ error: 'Room is full' });
     }
 
     const newPlayer = await prisma.roomPlayer.create({
@@ -198,7 +219,7 @@ router.post('/:code/join', async (req: Request, res: Response) => {
       }
     });
 
-    console.log(`Player joined room ${code}: ${displayName} (${room.players.length + 1} total players)`);
+    console.log(`New player joined room ${code}: ${displayName} (${room.players.length + 1} total players)`);
 
     res.json({
       roomId: room.id,
