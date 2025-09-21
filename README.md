@@ -13,6 +13,12 @@ Planned: A modern, real-time multiplayer music quiz game that integrates with yo
 - **Modern UI**: Beautiful glassmorphism design with smooth animations
 - **Responsive Design**: Works perfectly on desktop and mobile devices
 
+- **Spotify OAuth Login Example**
+![Demo](assets/login.gif)
+
+- **Music Song Display Example**
+![Demo](assets/song_count.gif)
+
 ## 🚀 Tech Stack
 
 ### Frontend
