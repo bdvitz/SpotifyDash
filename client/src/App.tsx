@@ -283,7 +283,7 @@ function App() {
               className="text-3xl font-bold text-white tracking-wider bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text cursor-pointer"
               onClick={() => navigateTo('dashboard')}
             >
-              INCLEW
+              Music Dashboard
             </h1>
             <div className="flex items-center space-x-4">
               {/* Game Session Indicator */}

@@ -117,7 +117,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onJoinGame, onCreateGame })
           <Music className="w-16 h-16 text-green-400 mb-4 group-hover:scale-110 transition-transform duration-300" />
           <h3 className="text-2xl font-semibold text-white mb-3">Your Music Stats</h3>
           <p className="text-purple-200 mb-6 leading-relaxed">
-            Explore your top tracks, artists, and albums with beautiful visualizations
+            Explore your top tracks, artists, and albums
           </p>
           <div className="grid grid-cols-3 gap-4 text-center">
             <div className="bg-white/10 rounded-xl p-3">

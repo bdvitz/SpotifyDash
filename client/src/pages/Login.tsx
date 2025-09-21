@@ -21,7 +21,7 @@ const Login: React.FC = () => {
           {/* Header */}
           <div className="mb-8">
             <h1 className="text-5xl md:text-6xl font-bold text-white mb-4 tracking-wider bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text">
-              INCLEW
+              Music Dashboard
             </h1>
             <p className="text-xl md:text-2xl text-purple-200 mb-2">
               Your Music, Your Game
