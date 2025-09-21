@@ -1,9 +1,10 @@
 # README.md
-# 🎵 Inclew - Spotify Music Quiz Game
+# 🎵 Inclew - Spotify Music Quiz Game (incomplete)
 
-A modern, real-time multiplayer music quiz game that integrates with your Spotify account to create personalized gaming experiences.
+A basic Spotify dashboard to see your most played tracks and artists
+Planned: A modern, real-time multiplayer music quiz game that integrates with your Spotify account to create personalized gaming experiences.
 
-## ✨ Features
+## ✨ Features (Current and Planned)
 
 - **Spotify Integration**: Secure OAuth authentication with PKCE flow
 - **Music Statistics**: View your top tracks, artists, and albums with beautiful visualizations
@@ -117,7 +118,7 @@ NODE_ENV=development
    - Frontend: http://localhost:5173
    - Backend: http://localhost:3001
 
-## 🎮 How to Play
+## 🎮 How to Play (Incomplete)
 
 1. **Connect Spotify**: Login with your Spotify account
 2. **View Stats**: Explore your music statistics and preferences
